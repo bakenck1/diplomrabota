@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
 
-from src.api.routers import auth, voice, admin
+from src.api.routers import auth, voice, admin, comparison
 from src.api.schemas import ErrorResponse
 from src.config import get_settings
 
@@ -22,11 +22,11 @@ async def lifespan(app: FastAPI):
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy import select
-    
+
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     # Create demo user
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
         query = select(User).where(User.id == demo_user_id)
         result = await session.execute(query)
         existing = result.scalar_one_or_none()
-        
+
         if not existing:
             from src.api.auth import get_password_hash
             demo_user = User(
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
             session.add(demo_user)
             await session.commit()
             print("Demo user created")
-    
+
     yield
     # Shutdown
 
@@ -59,7 +59,7 @@ def custom_openapi(app: FastAPI):
     """Generate custom OpenAPI schema with detailed documentation."""
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     openapi_schema = get_openapi(
         title="Voice Assistant Pipeline API",
         version="1.0.0",
@@ -73,6 +73,7 @@ API для голосового ассистента для пожилых по�
 - **Нормализация**: Автоматическое исправление ошибок распознавания
 - **Генерация ответа**: Синтез речи (TTS)
 - **Администрирование**: Управление пользователями, диалогами, словарём
+- **Сравнительный анализ**: Тестирование разных алгоритмов STT (OpenAI, Google)
 
 ### Аутентификация:
 Используется JWT Bearer токен. Получите токен через `/api/auth/login`.
@@ -103,12 +104,16 @@ API для голосового ассистента для пожилых по�
                 "description": "Голосовые сессии: запись, распознавание, синтез речи",
             },
             {
+                "name": "comparison",
+                "description": "Сравнительный анализ алгоритмов распознавания речи",
+            },
+            {
                 "name": "admin",
                 "description": "Административные функции: пользователи, диалоги, словарь, аналитика",
             },
         ],
     )
-    
+
     # Add security scheme
     openapi_schema["components"]["securitySchemes"] = {
         "bearerAuth": {
@@ -118,12 +123,12 @@ API для голосового ассистента для пожилых по�
             "description": "JWT токен, полученный через /api/auth/login",
         }
     }
-    
+
     # Add examples
     openapi_schema["info"]["x-logo"] = {
         "url": "https://example.com/logo.png"
     }
-    
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 
@@ -154,6 +159,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(auth.router)
     app.include_router(voice.router)
+    app.include_router(comparison.router)
     app.include_router(admin.router)
 
     # Custom OpenAPI schema
@@ -184,19 +190,19 @@ def create_app() -> FastAPI:
         """Serve audio files from local storage."""
         from fastapi.responses import Response
         from src.services.storage import StorageService
-        
+
         storage = StorageService()
         audio_data = storage.get_local_file(path)
-        
+
         if audio_data is None:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
                 content={"detail": "Audio file not found"},
             )
-        
+
         # Determine content type
         content_type = "audio/mpeg" if path.endswith(".mp3") else "audio/wav"
-        
+
         return Response(
             content=audio_data,
             media_type=content_type,
