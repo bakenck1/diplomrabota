@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -197,3 +197,37 @@ class ErrorResponse(BaseModel):
     message: str
     details: Optional[dict] = None
     request_id: Optional[str] = None
+
+
+# Comparison Analysis schemas
+
+class MetricResponse(BaseModel):
+    """Metric for a specific STT algorithm."""
+    algorithm_name: str
+    confidence_score: float
+    processing_time_ms: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SpeechRecordResponse(BaseModel):
+    """Speech record response with metrics."""
+    id: uuid.UUID
+    user_id: uuid.UUID
+    audio_url: Optional[str]
+    recognized_text_ru: Optional[str]
+    recognized_text_kz: Optional[str]
+    created_at: datetime
+    metrics: List[MetricResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class ComparisonStatsResponse(BaseModel):
+    """Aggregated stats for comparison."""
+    total_records: int
+    avg_confidence_by_provider: dict[str, float]
+    avg_latency_by_provider: dict[str, float]

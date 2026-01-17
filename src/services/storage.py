@@ -18,7 +18,7 @@ LOCAL_STORAGE_DIR = Path("audio_storage")
 
 class StorageService:
     """Service for storing and retrieving audio files from S3/MinIO or local storage.
-    
+
     Validates: Requirements 5.1, 10.2
     """
 
@@ -28,10 +28,10 @@ class StorageService:
         self.client = None
         self.bucket = self.settings.s3_bucket_name
         self.use_local = True  # Default to local storage
-        
+
         # Ensure local storage directory exists
         LOCAL_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        
+
         # Try to initialize S3 client
         try:
             import boto3
@@ -70,7 +70,7 @@ class StorageService:
     ) -> str:
         """Upload audio file to storage."""
         key = self._generate_path(user_id, conversation_id, turn_id, file_type)
-        
+
         if self.use_local:
             # Save to local storage
             local_path = LOCAL_STORAGE_DIR / key
@@ -90,7 +90,45 @@ class StorageService:
                 local_path = LOCAL_STORAGE_DIR / key
                 local_path.parent.mkdir(parents=True, exist_ok=True)
                 local_path.write_bytes(audio)
-        
+
+        return key
+
+    async def upload_research_audio(
+        self,
+        audio: bytes,
+        user_id,
+        record_id,
+        content_type: str = "audio/wav",
+    ) -> str:
+        """Upload research audio file to storage."""
+        ext = "wav"
+        if "mpeg" in content_type:
+            ext = "mp3"
+        elif "ogg" in content_type:
+            ext = "ogg"
+
+        key = f"users/{user_id}/research/{record_id}.{ext}"
+
+        if self.use_local:
+            # Save to local storage
+            local_path = LOCAL_STORAGE_DIR / key
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_bytes(audio)
+        elif self.client:
+            try:
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=audio,
+                    ContentType=content_type,
+                )
+            except Exception as e:
+                print(f"Warning: Failed to upload to S3: {e}")
+                # Fallback to local
+                local_path = LOCAL_STORAGE_DIR / key
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                local_path.write_bytes(audio)
+
         return key
 
     def generate_signed_url(
@@ -102,10 +140,10 @@ class StorageService:
         if self.use_local:
             # Return API endpoint URL for local files
             return f"/api/audio/{key}"
-            
+
         if not self.client:
             return f"/api/audio/{key}"
-            
+
         if expiration_seconds is None:
             expiration_seconds = self.settings.s3_url_expiration_seconds
 
@@ -118,7 +156,7 @@ class StorageService:
             return url
         except Exception:
             return f"/api/audio/{key}"
-    
+
     def get_local_file(self, key: str) -> Optional[bytes]:
         """Get file from local storage."""
         local_path = LOCAL_STORAGE_DIR / key
@@ -138,7 +176,7 @@ class StorageService:
         """List files older than specified days."""
         if not self.client:
             return []
-            
+
         cutoff_date = datetime.utcnow() - timedelta(days=older_than_days)
         old_keys = []
 

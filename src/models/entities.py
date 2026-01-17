@@ -49,6 +49,9 @@ class User(Base):
     conversations: Mapped[list["Conversation"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    speech_records: Mapped[list["SpeechRecord"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class Conversation(Base):
@@ -112,3 +115,44 @@ class Turn(Base):
 
     # Relationships
     conversation: Mapped["Conversation"] = relationship(back_populates="turns")
+
+
+class SpeechRecord(Base):
+    """Record of a speech recognition request for comparative analysis."""
+
+    __tablename__ = "speech_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+
+    audio_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    audio_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    recognized_text_ru: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recognized_text_kz: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user: Mapped["User"] = relationship(back_populates="speech_records")
+    metrics: Mapped[list["RecognitionMetric"]] = relationship(
+        back_populates="speech_record", cascade="all, delete-orphan"
+    )
+
+
+class RecognitionMetric(Base):
+    """Metrics for a specific STT algorithm on a speech record."""
+
+    __tablename__ = "recognition_metrics"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    speech_record_id: Mapped[str] = mapped_column(String(36), ForeignKey("speech_records.id"), nullable=False)
+
+    algorithm_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    confidence_score: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
+    processing_time_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    speech_record: Mapped["SpeechRecord"] = relationship(back_populates="metrics")
